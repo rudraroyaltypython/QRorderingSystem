@@ -1,4 +1,3 @@
-# orders/models.py
 from django.db import models
 from django.contrib.auth.models import User
 from django.conf import settings
@@ -6,6 +5,27 @@ from django.core.files import File
 from django.db.models import Sum, F, DecimalField
 from io import BytesIO
 import qrcode
+from datetime import date
+
+
+# -----------------------------
+# LICENSE CONFIG
+# -----------------------------
+class LicenseConfig(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="license")
+    expiry_date = models.DateField(null=True, blank=True)  # allow None for unlimited license
+
+    class Meta:
+        verbose_name = "License Configuration"
+        verbose_name_plural = "License Configuration"
+
+    def __str__(self):
+        return f"License for {self.user.username} - Expires {self.expiry_date}"
+
+    def is_active(self):
+        # active if expiry_date is None or today/future
+        return (self.expiry_date is None) or (self.expiry_date >= date.today())
+
 
 # -----------------------------
 # TENANT / RESTAURANT
@@ -13,7 +33,7 @@ import qrcode
 class Restaurant(models.Model):
     name = models.CharField(max_length=200)
     owner = models.OneToOneField(User, on_delete=models.CASCADE, related_name="restaurant_owner")
-    expiry_date = models.DateField(null=True, blank=True)  # optional; if empty -> no expiry
+    expiry_date = models.DateField(null=True, blank=True)  # optional
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -23,10 +43,16 @@ class Restaurant(models.Model):
     def __str__(self):
         return self.name
 
+    def is_expired(self):
+        return (self.expiry_date is not None) and (self.expiry_date < date.today())
+
+    def is_active_now(self):
+        """Check both manual toggle and expiry date."""
+        return self.is_active and (self.expiry_date is None or self.expiry_date >= date.today())
+
 
 # -----------------------------
-# SITE / BRAND CONFIG (what your templates use as site_config.*)
-# One row per restaurant (use Admin -> add/edit)
+# SITE / BRAND CONFIG
 # -----------------------------
 def upload_logo_path(instance, filename):
     return f"branding/{instance.restaurant_id}/logo/{filename}"
@@ -38,24 +64,17 @@ def upload_beep_path(instance, filename):
     return f"branding/{instance.restaurant_id}/beep/{filename}"
 
 class Config(models.Model):
-    restaurant = models.OneToOneField(Restaurant, on_delete=models.CASCADE, related_name="config")
-
-    # used to build QR links (domain or public IP; e.g. mybrand.com)
-    server_ip = models.CharField(
-        max_length=200,
-        help_text="Domain or public IP for QR links (e.g. example.com)."
+    restaurant = models.OneToOneField(
+        Restaurant,
+        on_delete=models.CASCADE,
+        related_name="config",
+        default=1  # TEMP default for migration
     )
-
-    # branding used by templates
+    server_ip = models.CharField(max_length=200, help_text="Domain or public IP for QR links")
     site_name  = models.CharField(max_length=120, default="QR Order")
     logo       = models.ImageField(upload_to=upload_logo_path, blank=True, null=True)
     favicon    = models.ImageField(upload_to=upload_favicon_path, blank=True, null=True)
-
-    # optional beep audio playable in templates/JS
-    beep_audio = models.FileField(
-        upload_to=upload_beep_path, blank=True, null=True,
-        help_text="Upload beep.mp3 to play on new orders."
-    )
+    beep_audio = models.FileField(upload_to=upload_beep_path, blank=True, null=True)
 
     class Meta:
         verbose_name = "Configuration"
@@ -69,7 +88,12 @@ class Config(models.Model):
 # MENU / CATEGORIES
 # -----------------------------
 class Category(models.Model):
-    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name="categories")
+    restaurant = models.ForeignKey(
+        Restaurant,
+        on_delete=models.CASCADE,
+        related_name="categories",
+        default=1  # TEMP default for migration
+    )
     name = models.CharField(max_length=100)
     is_active = models.BooleanField(default=True)
 
@@ -87,7 +111,12 @@ class MenuItem(models.Model):
         ("NONVEG", "Non-Veg"),
         ("OTHER", "Other"),
     ]
-    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name="menu_items")
+    restaurant = models.ForeignKey(
+        Restaurant,
+        on_delete=models.CASCADE,
+        related_name="menu_items",
+        default=1  # TEMP default for migration
+    )
     name = models.CharField(max_length=200)
     category = models.ForeignKey(Category, null=True, blank=True, on_delete=models.SET_NULL, related_name="items")
     type = models.CharField(max_length=10, choices=TYPE_CHOICES, default="VEG")
@@ -107,7 +136,12 @@ class MenuItem(models.Model):
 # TABLES + QR
 # -----------------------------
 class Table(models.Model):
-    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name="tables")
+    restaurant = models.ForeignKey(
+        Restaurant,
+        on_delete=models.CASCADE,
+        related_name="tables",
+        default=1  # TEMP default for migration
+    )
     name = models.CharField(max_length=50)
     code = models.CharField(max_length=20, default="TEMP")
     qr_image = models.ImageField(upload_to="qrcodes/", blank=True, null=True)
@@ -119,24 +153,16 @@ class Table(models.Model):
     def __str__(self):
         return f"{self.name} ({self.restaurant.name})"
 
-    def _qr_base_url(self) -> str:
-        """
-        Build the base URL using Config.server_ip.
-        Avoid hardcoding ports; add :8000 only if DEBUG and you want local dev behavior.
-        """
-        # default scheme http; override by settings if provided
+    def _qr_base_url(self):
         scheme = getattr(settings, "SITE_SCHEME", "http")
         server_ip = getattr(self.restaurant, "config", None).server_ip if hasattr(self.restaurant, "config") else None
         host = server_ip or "localhost"
-
-        # optional: only append :8000 in DEBUG (you can change this to suit)
         if getattr(settings, "DEBUG", False):
             return f"{scheme}://{host}:8000"
         return f"{scheme}://{host}"
 
     def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)  # ensure we have a pk for image path
-        # Generate QR code with the table code
+        super().save(*args, **kwargs)
         base = self._qr_base_url()
         qr_url = f"{base}/menu/?table={self.code}"
         img = qrcode.make(qr_url)
@@ -158,7 +184,12 @@ class Order(models.Model):
         ("PAID", "Paid"),
         ("CANCELLED", "Cancelled"),
     ]
-    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name="orders")
+    restaurant = models.ForeignKey(
+        Restaurant,
+        on_delete=models.CASCADE,
+        related_name="orders",
+        default=1  # TEMP default for migration
+    )
     table = models.ForeignKey(Table, null=True, on_delete=models.SET_NULL, related_name="orders")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="PENDING")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -187,35 +218,3 @@ class OrderItem(models.Model):
 
     def line_total(self):
         return self.qty * self.item.price
-
-
-# -----------------------------
-# BILLING (optional)
-# -----------------------------
-class Bill(models.Model):
-    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name="bills")
-    customer = models.ForeignKey(User, on_delete=models.CASCADE)
-    order = models.ForeignKey(Order, on_delete=models.CASCADE)
-    items = models.TextField(help_text="Store JSON or CSV of items at billing time")
-    total_amount = models.DecimalField(max_digits=10, decimal_places=2)
-    tax = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    service_charge = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    date = models.DateTimeField(auto_now_add=True)
-    status = models.CharField(
-        max_length=20,
-        choices=[("pending", "Pending"), ("paid", "Paid")],
-        default="pending",
-    )
-
-    class Meta:
-        ordering = ["-date"]
-
-    def __str__(self):
-        return f"Bill for Order #{self.order.id} - {self.customer.username} ({self.restaurant.name})"
-
-    def save(self, *args, **kwargs):
-        # if paid, mark order PAID (business rule — adjust if needed)
-        super().save(*args, **kwargs)
-        if self.status == "paid" and self.order.status != "PAID":
-            self.order.status = "PAID"
-            self.order.save(update_fields=["status"])

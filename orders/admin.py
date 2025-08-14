@@ -1,20 +1,52 @@
 from django.contrib import admin
-from .models import Config, Table, Category, MenuItem, Order, OrderItem, LicenseConfig
-import csv
-from django.http import HttpResponse
+from django.utils.html import format_html
 from django.utils.timezone import now, timedelta
-from django.contrib.auth import get_user_model
+from django.http import HttpResponse
+import csv
 
-User = get_user_model()
+from .models import (
+    LicenseConfig, Restaurant, Config, Table, Category, MenuItem,
+    Order, OrderItem
+)
+
 
 # ------------------------
 # LICENSE CONFIG
 # ------------------------
 @admin.register(LicenseConfig)
 class LicenseConfigAdmin(admin.ModelAdmin):
-    list_display = ('user', 'expiry_date')
+    list_display = ('user', 'expiry_date', 'status_badge')
     list_filter = ('expiry_date',)
     search_fields = ('user__username',)
+
+    def status_badge(self, obj):
+        if obj.is_active():
+            return format_html('<span style="color:green;font-weight:bold;">Active</span>')
+        return format_html('<span style="color:red;font-weight:bold;">Expired</span>')
+    status_badge.short_description = "Status"
+
+
+# ------------------------
+# RESTAURANT
+# ------------------------
+@admin.register(Restaurant)
+class RestaurantAdmin(admin.ModelAdmin):
+    list_display = ('name', 'owner', 'expiry_date', 'is_active', 'status_flag')
+    list_filter = ('is_active', 'expiry_date')
+    search_fields = ('name', 'owner__username', 'owner__email')
+    actions = ['deactivate_expired']
+
+    @admin.display(description="Status")
+    def status_flag(self, obj):
+        if obj.is_active_now():
+            return format_html('<span style="color:green;font-weight:bold;">Active</span>')
+        else:
+            return format_html('<span style="color:red;font-weight:bold;">Expired/Inactive</span>')
+
+    def deactivate_expired(self, request, queryset):
+        count = queryset.filter(expiry_date__lt=now().date()).update(is_active=False)
+        self.message_user(request, f"{count} restaurant(s) deactivated (expired).")
+    deactivate_expired.short_description = "Deactivate expired restaurants"
 
 
 # ------------------------
@@ -22,18 +54,13 @@ class LicenseConfigAdmin(admin.ModelAdmin):
 # ------------------------
 @admin.register(Config)
 class ConfigAdmin(admin.ModelAdmin):
-    list_display = ('server_ip', 'restaurant_name')
-
-    def has_add_permission(self, request):
-        # Allow only one config row per user
-        return not Config.objects.filter(user=request.user).exists()
+    list_display = ('restaurant', 'server_ip', 'site_name')
 
     def get_queryset(self, request):
-        # Superuser can see all, others see only their own config
         qs = super().get_queryset(request)
         if request.user.is_superuser:
             return qs
-        return qs.filter(user=request.user)
+        return qs.filter(restaurant__owner=request.user)
 
 
 # ------------------------
@@ -41,13 +68,13 @@ class ConfigAdmin(admin.ModelAdmin):
 # ------------------------
 @admin.register(Table)
 class TableAdmin(admin.ModelAdmin):
-    list_display = ('name', 'code', 'qr_image')
+    list_display = ('name', 'code', 'qr_image', 'restaurant')
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         if request.user.is_superuser:
             return qs
-        return qs.filter(config__user=request.user)
+        return qs.filter(restaurant__owner=request.user)
 
 
 # ------------------------
@@ -55,14 +82,14 @@ class TableAdmin(admin.ModelAdmin):
 # ------------------------
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
-    list_display = ('name', 'is_active')
+    list_display = ('name', 'is_active', 'restaurant')
     list_editable = ('is_active',)
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         if request.user.is_superuser:
             return qs
-        return qs.filter(config__user=request.user)
+        return qs.filter(restaurant__owner=request.user)
 
 
 # ------------------------
@@ -70,14 +97,14 @@ class CategoryAdmin(admin.ModelAdmin):
 # ------------------------
 @admin.register(MenuItem)
 class MenuItemAdmin(admin.ModelAdmin):
-    list_display = ('name', 'category', 'type', 'price', 'is_available')
+    list_display = ('name', 'category', 'type', 'price', 'is_available', 'restaurant')
     list_editable = ('is_available',)
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         if request.user.is_superuser:
             return qs
-        return qs.filter(category__config__user=request.user)
+        return qs.filter(restaurant__owner=request.user)
 
 
 # ------------------------
@@ -86,6 +113,7 @@ class MenuItemAdmin(admin.ModelAdmin):
 class OrderItemInline(admin.TabularInline):
     model = OrderItem
     readonly_fields = ('item', 'qty')
+    extra = 0
 
 
 # ------------------------
@@ -113,7 +141,7 @@ def export_sales_csv(queryset, title):
 # ------------------------
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ('id', 'table', 'status', 'created_at', 'total_amount')
+    list_display = ('id', 'table', 'status', 'created_at', 'total_amount', 'restaurant')
     inlines = (OrderItemInline,)
     actions = ['export_daily_sales', 'export_weekly_sales', 'export_monthly_sales']
 
@@ -121,7 +149,7 @@ class OrderAdmin(admin.ModelAdmin):
         qs = super().get_queryset(request)
         if request.user.is_superuser:
             return qs
-        return qs.filter(table__config__user=request.user)
+        return qs.filter(restaurant__owner=request.user)
 
     def export_daily_sales(self, request, queryset):
         today = now().date()
