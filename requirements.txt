@@ -1,0 +1,8 @@
+Django>=4.2
+djangorestframework
+qrcode
+Pillow
+django-environ
+django-jazzmin       # or django-admin-interface
+django-colorfield    # only if using admin-interface
+whitenoise

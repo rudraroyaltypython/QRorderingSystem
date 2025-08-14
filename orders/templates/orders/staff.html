@@ -1,0 +1,425 @@
+{% load static %}
+<link rel="icon" type="image/png" href="{{ site_config.favicon.url|default:'' }}">
+
+<!doctype html>
+<html>
+
+<head>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>{{ site_config.site_name }}</title>
+    <link rel="icon" type="image/png" href="{{ site_config.favicon.url|default:'' }}">
+    <style>
+        /* Palette: #780000 #c1121f #bc6c25 #003049 #ffb703 #6f1d1b */
+        :root {
+            --deep-red: #780000;
+            --bright-red: #c1121f;
+            --gold: #bc6c25;
+            --navy: #003049;
+            --warm-yellow: #ffb703;
+            --burgundy: #6f1d1b;
+            --served-green: #27ae60;
+            /* extra for "Served" indicator */
+            --bg: #f6f7f9;
+            --card: #ffffff;
+            --muted: #667085;
+        }
+
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            font-family: Inter, "Segoe UI", Roboto, Arial;
+            background: var(--bg);
+            color: var(--navy);
+        }
+
+        header {
+            background: linear-gradient(90deg, var(--navy), var(--deep-red));
+            color: #fff;
+            padding: 16px;
+            text-align: center;
+            font-size: 1.2rem;
+            font-weight: 700;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 16px auto;
+            padding: 8px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+
+        .filter,
+        .refresh-btn {
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            background: #fff;
+            cursor: pointer;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+        }
+
+        .orders-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 12px;
+        }
+
+        .order-card {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 12px;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+            position: relative;
+            overflow: hidden;
+            border-left: 6px solid var(--navy);
+            transition: transform .18s ease, box-shadow .18s ease;
+        }
+
+        .order-card.new {
+            animation: pulse 1s ease;
+            border-left-color: var(--gold);
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1)
+            }
+
+            50% {
+                transform: scale(1.02)
+            }
+
+            100% {
+                transform: scale(1)
+            }
+        }
+
+        .order-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px
+        }
+
+        .order-title {
+            font-weight: 700;
+            color: var(--deep-red);
+            font-size: 1.05rem
+        }
+
+        .meta {
+            font-size: 0.9rem;
+            color: var(--muted)
+        }
+
+        .items {
+            margin: 10px 0;
+            color: #223249;
+            font-size: 0.95rem
+        }
+
+        .items li {
+            margin: 6px 0
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-weight: 700;
+            color: white;
+            font-size: 0.85rem;
+        }
+
+        .badge.pending {
+            background: var(--warm-yellow);
+            color: #002341;
+        }
+
+        .badge.inprogress {
+            background: var(--navy);
+        }
+
+        .badge.served {
+            background: var(--served-green);
+        }
+
+        .actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px
+        }
+
+        .btn {
+            flex: 1;
+            padding: 10px;
+            border-radius: 10px;
+            border: 0;
+            color: white;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+        }
+
+        .btn-accept {
+            background: var(--warm-yellow);
+            color: var(--navy);
+        }
+
+        .btn-accept:hover {
+            background: var(--gold);
+            color: white;
+        }
+
+        .btn-served {
+            background: var(--bright-red);
+        }
+
+        .btn-served:hover {
+            background: var(--deep-red);
+        }
+
+        .btn-paid {
+            background: var(--burgundy);
+        }
+
+        .btn-paid:hover {
+            background: var(--navy);
+        }
+
+        .no-orders {
+            padding: 30px;
+            text-align: center;
+            color: var(--muted);
+            background: var(--card);
+            border-radius: 12px;
+        }
+
+        .small {
+            font-size: 0.85rem;
+            color: var(--muted);
+        }
+
+        .timestamp {
+            font-size: 0.8rem;
+            color: var(--muted)
+        }
+
+        /* highlight new badge dot */
+        .new-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--gold);
+            display: inline-block;
+            margin-right: 8px;
+            vertical-align: middle
+        }
+
+        .btn-cancel {
+            background: gray;
+            color: white;
+        }
+
+        .btn-cancel:hover {
+            background: #444;
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+    </style>
+</head>
+
+<body>
+    <header style="display:flex;align-items:center;justify-content:center;gap:10px;">
+        {% if site_config.logo %}
+        <img src="{{ site_config.logo.url }}" alt="{{ site_config.site_name }}" style="height:40px;">
+        {% endif %}
+        <h1 style="margin:0;font-size:1.4rem;font-weight:700;color:white;">
+            {{ site_config.site_name }}
+        </h1>
+    </header>
+    <div class="container">
+        <div class="controls">
+            <div class="filter" id="filterBox">
+                Show:
+                <select id="statusFilter" style="margin-left:8px;padding:6px;border-radius:6px;border:1px solid #ddd;">
+                    <option value="">All</option>
+                    <option value="PENDING">Pending</option>
+                    <option value="IN_PROGRESS">In Progress</option>
+                    <option value="SERVED">Served</option>
+                    <option value="PAID">Paid</option>
+                    <option value="CANCELLED">Cancelled</option>
+
+                </select>
+            </div>
+            <div class="refresh-btn" id="manualRefresh">Refresh</div>
+            <div class="small">Auto refresh every 3s · last <span id="lastSeen">—</span></div>
+        </div>
+
+        <div id="orders" class="orders-grid">
+            <div class="no-orders">Loading orders…</div>
+        </div>
+    </div>
+
+    <script>
+        // simple beep using WebAudio API
+        function playBeep() {
+            const beepAudio = document.getElementById('beepSound');
+            if (beepAudio) {
+                beepAudio.currentTime = 0;
+                beepAudio.play().catch(() => { });
+            }
+        }
+        const ordersContainer = document.getElementById('orders');
+        const lastSeenEl = document.getElementById('lastSeen');
+        const statusFilter = document.getElementById('statusFilter');
+        const manualRefresh = document.getElementById('manualRefresh');
+
+        let prevOrderIds = new Set();
+        let polling = null;
+
+        function statusBadge(status) {
+            if (status === 'PENDING') return `<span class="badge pending">PENDING</span>`;
+            if (status === 'IN_PROGRESS') return `<span class="badge inprogress">IN PROGRESS</span>`;
+            if (status === 'SERVED') return `<span class="badge served">SERVED</span>`;
+            if (status === 'PAID') return `<span class="badge served">PAID</span>`;
+            if (status === 'CANCELLED') return `<span class="badge" style="background:#6b7280;">CANCELLED</span>`;
+            return `<span class="badge">${status}</span>`;
+        }
+
+
+        function createOrderCard(o, isNew = false) {
+            const card = document.createElement('div');
+            card.className = 'order-card' + (isNew ? ' new' : '');
+            const itemsHtml = (o.items || []).map(i => `<li>${i.item.name} x ${i.qty}</li>`).join('');
+            card.innerHTML = `
+        <div class="order-head">
+          <div>
+            <div class="order-title">Order #${o.id}</div>
+            <div class="meta small">Table: <strong>${o.table}</strong> · <span class="timestamp">${new Date(o.created_at).toLocaleTimeString()}</span></div>
+          </div>
+          <div>${statusBadge(o.status)}</div>
+        </div>
+
+        <ul class="items">${itemsHtml}</ul>
+
+        <div class="actions">
+          <button class="btn btn-accept" data-id="${o.id}" data-action="IN_PROGRESS">Accept</button>
+          <button class="btn btn-served" data-id="${o.id}" data-action="SERVED">Mark Served</button>
+          <button class="btn btn-paid" data-id="${o.id}" data-action="PAID">Mark Paid</button>
+          <button class="btn btn-cancel" data-id="${o.id}" data-action="CANCELLED">Cancel</button>
+        </div>
+      `;
+            // After building the card HTML...
+            // Disable buttons if order already finished
+            const finished = (o.status || '').toUpperCase() === 'PAID' || (o.status || '').toUpperCase() === 'CANCELLED';
+            if (finished) {
+                // visually disable buttons and prevent further actions
+                card.querySelectorAll('button').forEach(b => {
+                    b.disabled = true;
+                });
+            }
+
+
+            // attach handlers
+            card.querySelectorAll('button').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const id = btn.dataset.id;
+                    const action = btn.dataset.action;
+                    btn.disabled = true;
+                    try {
+                        await fetch(`/api/orders/${id}/`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ status: action })
+                        });
+                        await loadOrders(); // refresh immediately
+                    } catch (err) {
+                        console.error(err);
+                        alert('Update failed');
+                    } finally { btn.disabled = false; }
+                });
+            });
+
+            return card;
+        }
+
+        async function loadOrders() {
+            try {
+                const res = await fetch(`/api/staff/orders/`);
+                if (!res.ok) throw new Error('Failed to fetch');
+                const data = await res.json();
+
+                // optional filter
+                const filter = statusFilter.value;
+                const orders = filter ? data.filter(o => o.status === filter) : data;
+
+                // detect new items
+                const currentIds = new Set(orders.map(o => o.id));
+                let newFound = false;
+                for (const id of currentIds) {
+                    if (!prevOrderIds.has(id)) {
+                        newFound = true;
+                        break;
+                    }
+                }
+
+                // build UI
+                ordersContainer.innerHTML = '';
+                if (orders.length === 0) {
+                    ordersContainer.innerHTML = '<div class="no-orders">No orders found</div>';
+                } else {
+                    // show newest first
+                    orders.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                    orders.forEach(o => {
+                        const isNew = !prevOrderIds.has(o.id);
+                        ordersContainer.appendChild(createOrderCard(o, isNew));
+                    });
+                }
+
+                // if new orders appeared — beep + highlight
+                if (newFound) {
+                    playBeep();
+                }
+
+                prevOrderIds = currentIds;
+                lastSeenEl.textContent = new Date().toLocaleTimeString();
+            } catch (err) {
+                console.error('loadOrders error', err);
+                ordersContainer.innerHTML = '<div class="no-orders">Unable to load orders</div>';
+            }
+        }
+
+        // polling
+        function startPolling() {
+            if (polling) clearInterval(polling);
+            loadOrders();
+            polling = setInterval(loadOrders, 3000);
+        }
+
+        // manual refresh
+        manualRefresh.addEventListener('click', () => loadOrders());
+
+        // filter change -> immediate reload
+        statusFilter.addEventListener('change', () => loadOrders());
+
+        // start
+        startPolling();
+    </script>
+    <audio id="beepSound" src="{% static 'sounds/beep.mp3' %}" preload="auto"></audio>
+</body>
+
+</html>

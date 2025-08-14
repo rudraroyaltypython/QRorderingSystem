@@ -1,0 +1,632 @@
+{% load static %}
+<link rel="icon" type="image/png" href="{{ site_config.favicon.url|default:'' }}">
+
+<!doctype html>
+<html>
+
+<head>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>{{ site_config.site_name }}</title>
+    <link rel="icon" type="image/png" href="{{ site_config.favicon.url|default:'' }}">
+    <style>
+        /* Palette: #780000 #c1121f #bc6c25 #003049 #ffb703 #6f1d1b */
+        :root {
+            --deep-red: #780000;
+            --bright-red: #c1121f;
+            --gold: #bc6c25;
+            --navy: #003049;
+            --warm-yellow: #ffb703;
+            --burgundy: #6f1d1b;
+            --bg: #f6f7f9;
+            --card: #ffffff;
+            --muted: #6b7280;
+            --served-green: #27ae60;
+        }
+
+        * {
+            box-sizing: border-box
+        }
+
+        body {
+            margin: 0;
+            font-family: Inter, "Segoe UI", Roboto, Arial;
+            background: var(--bg);
+            color: var(--navy);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        header {
+            background: linear-gradient(90deg, var(--navy), var(--deep-red));
+            color: #fff;
+            padding: 16px;
+            text-align: center;
+            font-size: 1.4rem;
+            font-weight: 700;
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
+        }
+
+        .wrap {
+            max-width: 1100px;
+            margin: 18px auto;
+            padding: 12px;
+        }
+
+        /* layout */
+        .main {
+            display: grid;
+            grid-template-columns: 1fr 360px;
+            gap: 18px;
+            align-items: start;
+        }
+
+        @media (max-width:900px) {
+            .main {
+                grid-template-columns: 1fr
+            }
+
+            .bill-panel {
+                position: static;
+                margin-top: 12px
+            }
+        }
+
+        /* Menu list */
+        .items {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 14px;
+        }
+
+        .card {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 12px;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            min-height: 100px;
+            transition: transform .15s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-6px);
+        }
+
+        .card h4 {
+            margin: 0 0 6px 0;
+            color: var(--burgundy);
+            font-size: 1.05rem;
+        }
+
+        .card p.desc {
+            margin: 0;
+            font-size: 0.9rem;
+            color: var(--muted);
+            min-height: 36px;
+        }
+
+        .card .meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 10px;
+        }
+
+        .price {
+            color: var(--gold);
+            font-weight: 700;
+        }
+
+        .add-btn {
+            background: var(--warm-yellow);
+            color: var(--navy);
+            border: 0;
+            padding: 8px 12px;
+            border-radius: 9px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all .12s ease;
+        }
+
+        .add-btn:hover {
+            background: var(--gold);
+            color: #041a2b;
+            transform: translateY(-2px);
+        }
+
+        /* Bill panel */
+        .bill-panel {
+            position: sticky;
+            top: 16px;
+            border-radius: 12px;
+            background: linear-gradient(180deg, #fff, #fff);
+            padding: 14px;
+            box-shadow: 0 8px 26px rgba(2, 6, 23, 0.08);
+            border-left: 6px solid var(--bright-red);
+        }
+
+        .bill-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .bill-header h3 {
+            margin: 0;
+            color: var(--deep-red);
+        }
+
+        .status-badge {
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-weight: 700;
+            color: white;
+            font-size: 0.9rem;
+        }
+
+        .status-pending {
+            background: var(--warm-yellow);
+            color: #042638;
+        }
+
+        .status-progress {
+            background: var(--navy);
+        }
+
+        .status-served {
+            background: var(--served-green);
+        }
+
+        .status-paid {
+            background: #94a3b8;
+        }
+
+        .cart-list {
+            margin: 12px 0;
+            max-height: 360px;
+            overflow: auto;
+            padding-right: 6px;
+        }
+
+        .cart-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 6px;
+            border-radius: 8px;
+        }
+
+        .cart-row+.cart-row {
+            border-top: 1px dashed #eee;
+        }
+
+        .qty-pill {
+            background: #f1f5f9;
+            padding: 6px 8px;
+            border-radius: 8px;
+            font-weight: 700;
+            color: var(--muted);
+            min-width: 40px;
+            text-align: center;
+        }
+
+        .small-muted {
+            font-size: 0.9rem;
+            color: var(--muted);
+        }
+
+        .totals {
+            margin-top: 12px;
+            border-top: 1px solid #f2f2f2;
+            padding-top: 12px;
+        }
+
+        .totals .row {
+            display: flex;
+            justify-content: space-between;
+            margin: 6px 0;
+            font-weight: 700;
+        }
+
+        .place-btn {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            border-radius: 10px;
+            border: 0;
+            background: var(--bright-red);
+            color: white;
+            font-weight: 800;
+            cursor: pointer;
+            margin-top: 10px;
+            font-size: 1rem;
+        }
+
+        .place-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed
+        }
+
+        /* tabs */
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .tab {
+            padding: 8px 12px;
+            border-radius: 10px;
+            cursor: pointer;
+            background: #fff;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+            font-weight: 700;
+        }
+
+        .tab.active {
+            border: 2px solid var(--bright-red);
+            color: var(--bright-red)
+        }
+
+        /* empty */
+        .empty {
+            text-align: center;
+            padding: 30px;
+            color: var(--muted);
+        }
+    </style>
+</head>
+
+<body>
+    <header style="display:flex;align-items:center;justify-content:center;gap:10px;">
+        {% if site_config.logo %}
+        <img src="{{ site_config.logo.url }}" alt="{{ site_config.site_name }}" style="height:40px;">
+        {% endif %}
+        <h1 style="margin:0;font-size:1.4rem;font-weight:700;color:white;">
+            {{ site_config.site_name }}
+        </h1>
+    </header>
+
+    <div class="wrap">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <div>
+                <div style="font-size:0.9rem;color:var(--muted)">Table</div>
+                <div style="font-size:1.1rem;font-weight:800;color:var(--deep-red)" id="tableCodeDisplay">—</div>
+            </div>
+            <div class="tabs">
+                <div class="tab active" data-tab="menuTab">Menu</div>
+                <div class="tab" data-tab="billTab">My Bills</div>
+            </div>
+        </div>
+
+        <div class="main">
+            <div>
+                <div id="menuTab" class="tab-panel">
+                    <div class="items" id="items"></div>
+                </div>
+                <div id="billTab" class="tab-panel" style="display:none;margin-top:12px">
+                    <div class="empty" id="billHistoryEmpty">Loading bills…</div>
+                    <div id="billHistory"></div>
+                </div>
+            </div>
+
+            <aside class="bill-panel">
+                <div class="bill-header">
+                    <h3>Your Live Bill</h3>
+                    <div id="orderStatusWrap"><span class="status-badge status-pending" id="orderStatus">—</span></div>
+                </div>
+
+                <div style="margin-top:10px" class="small-muted">Current order (auto updates)</div>
+
+                <div class="cart-list" id="cartList">
+                    <div class="empty">No items yet — add from Menu</div>
+                </div>
+
+                <div class="totals">
+                    <div class="row">
+                        <div>Subtotal</div>
+                        <div id="subtotal">₹0.00</div>
+                    </div>
+                    <div class="row">
+                        <div>Tax (<span id="taxPct">5</span>%)</div>
+                        <div id="taxAmt">₹0.00</div>
+                    </div>
+                    <div class="row">
+                        <div>Service</div>
+                        <div id="serviceAmt">₹0.00</div>
+                    </div>
+                    <div class="row" style="font-size:1.15rem;">
+                        <div>Total</div>
+                        <div id="grandTotal">₹0.00</div>
+                    </div>
+                    <button id="placeOrder" class="place-btn">Place Order</button>
+                </div>
+
+                <div style="margin-top:8px" class="small-muted">Orders auto-refresh every 3s</div>
+            </aside>
+        </div>
+    </div>
+
+    <script>
+        function clearBillUI() {
+            document.getElementById('cartList').innerHTML = '<div class="empty">No items yet — add from Menu</div>';
+            document.getElementById('subtotal').textContent = money(0);
+            document.getElementById('taxAmt').textContent = money(0);
+            document.getElementById('serviceAmt').textContent = money(SERVICE_FIXED);
+            document.getElementById('grandTotal').textContent = money(0);
+        }
+
+        /* CONFIG */
+        const TAX_PERCENT = 5;
+        const SERVICE_FIXED = 0.00;
+        const POLL_MS = 3000;
+
+        const money = v => '₹' + Number(v || 0).toFixed(2);
+
+        function mapStatusToClass(status) {
+            if (!status) return ['status-pending', 'Pending'];
+            const s = status.toUpperCase();
+            if (s === 'PENDING') return ['status-pending', 'PENDING'];
+            if (s === 'IN_PROGRESS') return ['status-progress', 'IN PROGRESS'];
+            if (s === 'SERVED') return ['status-served', 'SERVED'];
+            if (s === 'PAID') return ['status-paid', 'PAID'];
+            return ['status-pending', status];
+        }
+
+        const urlParams = new URLSearchParams(location.search);
+        const tableCode = urlParams.get('table') || urlParams.get('table_code') || null;
+        document.getElementById('tableCodeDisplay').textContent = tableCode || '(no table)';
+
+        /* state */
+        let menuItems = [];
+        let cart = JSON.parse(localStorage.getItem('cart') || '[]');
+        renderLocalCart();
+        let lastSeenOrderId = null;
+
+        function renderMenu() {
+            const container = document.getElementById('items');
+            container.innerHTML = '';
+
+            if (!menuItems.length) {
+                container.innerHTML = '<div class="empty">Menu is empty</div>';
+                return;
+            }
+
+            menuItems.forEach(cat => {
+                const catDiv = document.createElement('div');
+                catDiv.innerHTML = `<h2 style="margin-top:20px;color:var(--bright-red)">${escapeHtml(cat.category)}</h2>`;
+
+                const itemsGrid = document.createElement('div');
+                itemsGrid.className = 'items';
+
+                cat.items.forEach(it => {
+                    const el = document.createElement('div');
+                    el.className = 'card';
+                    const badgeColor = it.type === 'VEG' ? 'green' : (it.type === 'NONVEG' ? 'red' : 'gray');
+                    el.innerHTML = `
+                <div>
+                    <h4>${escapeHtml(it.name)} <span style="color:${badgeColor};font-size:0.8rem;">●</span></h4>
+                    <p class="desc">${escapeHtml(it.description || '')}</p>
+                </div>
+                <div class="meta">
+                    <div class="price">${money(it.price)}</div>
+                    <div><button class="add-btn" data-id="${it.id}">Add</button></div>
+                </div>
+            `;
+                    el.querySelector('.add-btn').addEventListener('click', () => {
+                        addToCart(it.id, it.name);
+                    });
+                    itemsGrid.appendChild(el);
+                });
+
+                catDiv.appendChild(itemsGrid);
+                container.appendChild(catDiv);
+            });
+        }
+
+
+        function renderLocalCart() {
+            const list = document.getElementById('cartList');
+            if (cart.length === 0) {
+                list.innerHTML = '<div class="empty">No items yet — add from Menu</div>';
+                updateTotals(0);
+                return;
+            }
+            list.innerHTML = '';
+            let subtotal = 0;
+            cart.forEach((ci, index) => {
+                const row = document.createElement('div');
+                row.className = 'cart-row';
+                row.innerHTML = `
+                <div>
+                    <div style="font-weight:700">${escapeHtml(ci.name)}</div>
+                    <div class="small-muted">Qty: ${ci.qty}</div>
+                </div>
+                <div style="text-align:right">
+                    <div class="qty-pill">${ci.qty}</div>
+                    <div style="margin-top:6px" class="small-muted">${money(ci.qty * ci.price)}</div>
+                    <button style="margin-top:4px;background:none;border:none;color:red;cursor:pointer;">✖</button>
+                </div>
+                `;
+                row.querySelector('button').addEventListener('click', () => {
+                    cart.splice(index, 1);
+                    localStorage.setItem('cart', JSON.stringify(cart));
+                    renderLocalCart();
+                });
+                list.appendChild(row);
+                subtotal += (ci.qty * ci.price);
+            });
+            updateTotals(subtotal);
+        }
+
+        function updateTotals(subtotal) {
+            const tax = subtotal * (TAX_PERCENT / 100);
+            const grand = subtotal + tax + SERVICE_FIXED;
+            document.getElementById('subtotal').textContent = money(subtotal);
+            document.getElementById('taxAmt').textContent = money(tax);
+            document.getElementById('serviceAmt').textContent = money(SERVICE_FIXED);
+            document.getElementById('grandTotal').textContent = money(grand);
+        }
+
+        function addToCart(itemId, name) {
+            const idNum = Number(itemId);
+            let menu = menuItems.find(m => m.id === idNum);
+            const price = menu ? parseFloat(menu.price) : 0;
+            const existing = cart.find(c => c.item_id === idNum);
+            if (existing) existing.qty++;
+            else cart.push({ item_id: idNum, qty: 1, name: name, price: price });
+            localStorage.setItem('cart', JSON.stringify(cart));
+            renderLocalCart();
+        }
+
+        async function placeOrder() {
+            if (!tableCode) {
+                alert('No table code in URL — please scan QR from your table.');
+                return;
+            }
+            if (cart.length === 0) {
+                alert('Cart empty');
+                return;
+            }
+            const payload = {
+                table_code: tableCode,
+                items: cart.map(c => ({ item_id: c.item_id, qty: c.qty }))
+            };
+            const btn = document.getElementById('placeOrder');
+            btn.disabled = true;
+            btn.textContent = 'Placing...';
+            try {
+                const res = await fetch('/api/orders/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (res.status === 201) {
+                    await res.json();
+                    cart = [];
+                    localStorage.removeItem('cart');
+                    renderLocalCart();
+                    await loadCustomerOrders();
+                    document.getElementById('beepSound').play().catch(() => { });
+                    alert('Order placed — thank you!');
+                } else {
+                    const err = await res.json().catch(() => ({ detail: 'unknown error' }));
+                    alert('Could not place order: ' + JSON.stringify(err));
+                }
+            } catch (e) {
+                alert('Network error placing order');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Place Order';
+            }
+        }
+
+        async function loadCustomerOrders() {
+            if (!tableCode) return;
+            try {
+                const res = await fetch(`/api/customer/orders/?table=${encodeURIComponent(tableCode)}`);
+                if (!res.ok) return;
+                const orders = await res.json();
+
+                const billHistoryEl = document.getElementById('billHistory');
+                const billEmpty = document.getElementById('billHistoryEmpty');
+
+                if (!orders || orders.length === 0) {
+                    billHistoryEl.innerHTML = '';
+                    billEmpty.textContent = 'No orders yet for this table';
+                    document.getElementById('orderStatus').textContent = '-';
+                    document.getElementById('orderStatus').className = 'status-badge status-pending';
+                    return;
+                }
+
+                orders.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                const latestOrder = orders[0];
+
+                billHistoryEl.innerHTML = '';
+                orders.forEach(o => {
+                    const [c, t] = mapStatusToClass(o.status);
+                    const div = document.createElement('div');
+                    div.style = "padding:8px;border-bottom:1px solid #eee;";
+                    div.innerHTML = `
+                        <div style="font-weight:700">Order #${o.id} — <span class="status-badge ${c}">${t}</span></div>
+                        <div class="small-muted">${new Date(o.created_at).toLocaleString()}</div>
+                    `;
+                    billHistoryEl.appendChild(div);
+                });
+                billEmpty.textContent = '';
+
+                const [cls, txt] = mapStatusToClass(latestOrder.status);
+                const badge = document.getElementById('orderStatus');
+                badge.textContent = txt;
+                badge.className = 'status-badge ' + cls;
+
+                const state = (latestOrder.status || '').toUpperCase();
+                if (state === 'PAID' || state === 'CANCELLED') return;
+
+                if (latestOrder.items && latestOrder.items.length > 0) {
+                    const cartList = document.getElementById('cartList');
+                    cartList.innerHTML = '';
+                    let subtotal = 0;
+                    (latestOrder.items || []).forEach(it => {
+                        const price = Number(it.item?.price ?? it.price ?? 0);
+                        const row = document.createElement('div');
+                        row.className = 'cart-row';
+                        row.innerHTML = `<div>
+                            <div style="font-weight:700">${escapeHtml(it.item?.name ?? 'Item')}</div>
+                            <div class="small-muted">Qty: ${it.qty}</div>
+                        </div>
+                        <div style="text-align:right">
+                            <div class="qty-pill">${it.qty}</div>
+                            <div class="small-muted" style="margin-top:6px">${money(it.qty * price)}</div>
+                        </div>`;
+                        cartList.appendChild(row);
+                        subtotal += (it.qty * price);
+                    });
+                    updateTotals(subtotal);
+                }
+            } catch (err) {
+                console.error('loadCustomerOrders error', err);
+            }
+        }
+
+        async function loadMenu() {
+            try {
+                const res = await fetch('/api/menu/');
+                menuItems = await res.json();
+                renderMenu();
+            } catch (e) {
+                console.error('loadMenu', e);
+                document.getElementById('items').innerHTML = '<div class="empty">Failed to load menu</div>';
+            }
+        }
+
+
+        document.querySelectorAll('.tab').forEach(t => {
+            t.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+                t.classList.add('active');
+                const tab = t.dataset.tab;
+                document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
+                document.getElementById(tab).style.display = 'block';
+            });
+        });
+
+        function escapeHtml(s) {
+            return String(s || '').replace(/[&<>"']/g, m => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[m]));
+        }
+
+        document.getElementById('placeOrder').addEventListener('click', placeOrder);
+
+        loadMenu();
+        loadCustomerOrders();
+        setInterval(loadCustomerOrders, POLL_MS);
+    </script>
+    <audio id="beepSound" src="{% static 'sounds/beep.mp3' %}" preload="auto"></audio>
+</body>
+
+</html>

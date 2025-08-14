@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Live Bill</title>
+    <style>
+        body {
+            font-family: Arial;
+            padding: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th,
+        td {
+            padding: 8px;
+            border: 1px solid #ccc;
+            text-align: left;
+        }
+
+        th {
+            background: #f8f8f8;
+        }
+
+        h1 {
+            color: #184e77;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Live Bill</h1>
+    <table id="bill-table">
+        <thead>
+            <tr>
+                <th>Item</th>
+                <th>Qty</th>
+                <th>Price</th>
+                <th>Total</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+    <h2>Total: ₹<span id="total">0</span></h2>
+
+    <script>
+        const orderId = "{{ order_id }}";
+        const apiUrl = `/api/orders/${orderId}/live/`;
+
+        function fetchBill() {
+            fetch(apiUrl)
+                .then(res => res.json())
+                .then(data => {
+                    let rows = '';
+                    data.items.forEach(item => {
+                        rows += `<tr>
+                                    <td>${item.name}</td>
+                                    <td>${item.qty}</td>
+                                    <td>₹${item.price}</td>
+                                    <td>₹${item.total}</td>
+                                 </tr>`;
+                    });
+                    document.querySelector('#bill-table tbody').innerHTML = rows;
+                    document.getElementById('total').innerText = data.total_amount.toFixed(2);
+                });
+        }
+
+        setInterval(fetchBill, 3000); // refresh every 3 seconds
+        fetchBill();
+    </script>
+</body>
+
+</html>
